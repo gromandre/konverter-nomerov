@@ -1,7 +1,8 @@
 import re
+import tkinter as tk
+from tkinter import messagebox
 
 def normalize_phone(digits: str) -> str:
-    """Привести к 11 цифрам, начинающимся с 7, или вернуть '' если невалидно."""
     digits = re.sub(r"\D", "", digits)
     if not digits:
         return ""
@@ -10,26 +11,20 @@ def normalize_phone(digits: str) -> str:
     elif len(digits) == 11 and digits.startswith("7"):
         pass
     elif len(digits) == 10:
-        # например "9872588333" -> "79872588333"
         digits = "7" + digits
     else:
         return ""
     return digits
 
 def extract_phones_from_line(line: str) -> list:
-    """
-    Из строки возвращает список нормализованных телефонных кандидатів,
-    пытаясь склеивать соседние группы цифр (напр. '+7 987 258-83-33').
-    """
     result = []
-    # кандидаты — последовательности только из цифр, +, скобок, пробелов, дефисов и т.п.
-    candidates = re.findall(r"[+\d\(\)\s\-\.\u2013/]{5,}", line)
+    # добавляем все виды тире/дефисов, включая необычные (‑, –, —, ‒)
+    candidates = re.findall(r"[+\d\(\)\s\-\–\—\‒\‑]{5,}", line)
     for cand in candidates:
         groups = re.findall(r"\d+", cand)
         i = 0
         while i < len(groups):
             found = None
-            # ищем минимальную последовательность groups[i..k] такую, что длина 10..11
             for k in range(i, len(groups)):
                 comb = "".join(groups[i:k+1])
                 if 10 <= len(comb) <= 11:
@@ -39,7 +34,6 @@ def extract_phones_from_line(line: str) -> list:
                 if len(comb) > 11:
                     break
             if not found:
-                # если не нашли комбинируя, попробуем взять одиночную группу, если она подходит
                 grp = groups[i]
                 if 10 <= len(grp) <= 11:
                     found = grp
@@ -50,19 +44,68 @@ def extract_phones_from_line(line: str) -> list:
                     result.append(norm)
     return result
 
-def process_file(inp="input.txt", out="output.txt"):
+
+
+def format_numbers():
+    raw_text = left_text.get("1.0", tk.END)
     phones = []
     seen = set()
-    with open(inp, "r", encoding="utf-8") as f:
-        for line in f:
-            for phone in extract_phones_from_line(line):
-                if phone not in seen:
-                    phones.append(phone)
-                    seen.add(phone)
-    with open(out, "w", encoding="utf-8") as f:
-        for p in phones:
-            f.write(p + "\n")
-    print(f"Got {len(phones)} phones -> saved to {out}")
+    for line in raw_text.splitlines():
+        for phone in extract_phones_from_line(line):
+            if phone not in seen:
+                phones.append(phone)
+                seen.add(phone)
+    # выводим результат
+    right_text.delete("1.0", tk.END)
+    if phones:
+        right_text.insert(tk.END, "\n".join(phones))
+    else:
+        messagebox.showinfo("Результат", "Не найдено ни одного номера.")
 
-if __name__ == "__main__":
-    process_file("input.txt", "output.txt")
+def copy_to_clipboard():
+    formatted = right_text.get("1.0", tk.END).strip()
+    if formatted:
+        root.clipboard_clear()
+        root.clipboard_append(formatted)
+        messagebox.showinfo("Скопировано", "Форматированные номера скопированы в буфер обмена!")
+    else:
+        messagebox.showwarning("Пусто", "Нет данных для копирования.")
+
+# GUI
+root = tk.Tk()
+root.title("Форматирование телефонов")
+root.geometry("800x500")
+
+frame = tk.Frame(root)
+frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+# Левое поле (ввод)
+left_label = tk.Label(frame, text="Вставьте список номеров")
+left_label.grid(row=0, column=0, padx=5, pady=5)
+
+left_text = tk.Text(frame, wrap="word")
+left_text.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
+
+# Правое поле (результат)
+right_label = tk.Label(frame, text="Форматированные номера")
+right_label.grid(row=0, column=1, padx=5, pady=5)
+
+right_text = tk.Text(frame, wrap="word")
+right_text.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+
+# Кнопки
+btn_frame = tk.Frame(root)
+btn_frame.pack(pady=5)
+
+format_btn = tk.Button(btn_frame, text="Форматировать →", command=format_numbers)
+format_btn.pack(side="left", padx=10)
+
+copy_btn = tk.Button(btn_frame, text="Скопировать в буфер", command=copy_to_clipboard)
+copy_btn.pack(side="left", padx=10)
+
+# Адаптивная сетка
+frame.columnconfigure(0, weight=1)
+frame.columnconfigure(1, weight=1)
+frame.rowconfigure(1, weight=1)
+
+root.mainloop()
